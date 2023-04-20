@@ -92,7 +92,7 @@ int main()
   a8:	00000097          	auipc	ra,0x0
   ac:	3ac080e7          	jalr	940(ra) # 454 <getpid>
   b0:	85aa                	mv	a1,a0
-      printf("<%d>:received pong\n", child_pid);
+      printf("%d: received pong\n", child_pid);
   b2:	00001517          	auipc	a0,0x1
   b6:	84650513          	addi	a0,a0,-1978 # 8f8 <malloc+0xf2>
   ba:	00000097          	auipc	ra,0x0
@@ -140,7 +140,7 @@ int main()
  132:	00000097          	auipc	ra,0x0
  136:	322080e7          	jalr	802(ra) # 454 <getpid>
  13a:	85aa                	mv	a1,a0
-      printf("<%d>:received ping\n", father_pid);
+      printf("%d: received ping\n", father_pid);
  13c:	00000517          	auipc	a0,0x0
  140:	7d450513          	addi	a0,a0,2004 # 910 <malloc+0x10a>
  144:	00000097          	auipc	ra,0x0
