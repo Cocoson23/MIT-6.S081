@@ -8,6 +8,8 @@ Disassembly of section .text:
 #include "kernel/types.h"
 #include "user/user.h"
 
+// important:
+//      child can read 0 after father close all write
 void prime(int* pip) {
    0:	7139                	addi	sp,sp,-64
    2:	fc06                	sd	ra,56(sp)
@@ -15,11 +17,13 @@ void prime(int* pip) {
    6:	f426                	sd	s1,40(sp)
    8:	0080                	addi	s0,sp,64
    a:	84aa                	mv	s1,a0
+    // disable child write left pipe
     close(pip[1]);
    c:	4148                	lw	a0,4(a0)
    e:	00000097          	auipc	ra,0x0
   12:	400080e7          	jalr	1024(ra) # 40e <close>
     int read_len, primes;
+    // if read_len = 0, pipe is empty, exit
     read_len = read(pip[0], &primes, sizeof(primes));
   16:	4611                	li	a2,4
   18:	fdc40593          	addi	a1,s0,-36
@@ -37,6 +41,7 @@ void prime(int* pip) {
   34:	00000097          	auipc	ra,0x0
   38:	3b2080e7          	jalr	946(ra) # 3e6 <exit>
     }
+    // show message
     printf("prime: %d\n", primes);
   3c:	fdc42583          	lw	a1,-36(s0)
   40:	00001517          	auipc	a0,0x1
@@ -44,23 +49,26 @@ void prime(int* pip) {
   48:	00000097          	auipc	ra,0x0
   4c:	718080e7          	jalr	1816(ra) # 760 <printf>
 
+    // create new pipe
     int pp[2];
     pipe(pp);
   50:	fd040513          	addi	a0,s0,-48
   54:	00000097          	auipc	ra,0x0
   58:	3a2080e7          	jalr	930(ra) # 3f6 <pipe>
+    // create grandson
     int pid = fork();
   5c:	00000097          	auipc	ra,0x0
   60:	382080e7          	jalr	898(ra) # 3de <fork>
     if(pid > 0) {
   64:	00a04963          	bgtz	a0,76 <prime+0x76>
-        }
         close(pp[1]);
         close(pip[0]);
+        // wait grandson exit...
         wait(0);
     }
     if(pid == 0) {
   68:	e53d                	bnez	a0,d6 <prime+0xd6>
+        // recursion
         prime(pp);
   6a:	fd040513          	addi	a0,s0,-48
   6e:	00000097          	auipc	ra,0x0
@@ -128,11 +136,11 @@ int main()
   fc:	2e6080e7          	jalr	742(ra) # 3de <fork>
     if(pid > 0) {
  100:	00a04963          	bgtz	a0,112 <main+0x32>
-        }
-    // disable father read pipe
+    // disable father write after write
         close(pip[1]);
         wait(0);
     }
+    // call func
     else if(pid == 0) {
  104:	e929                	bnez	a0,156 <main+0x76>
         prime(pip);
