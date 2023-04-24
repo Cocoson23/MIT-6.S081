@@ -12,6 +12,10 @@ xv6-labs-2021 -> environment to get your grade
 
 - Test your code  
 `make grade`
-## Document ##
+## Document ##  
+Official Docs
+- [Official XV6 Link](https://github.com/mit-pdos/xv6-riscv)  
+
+Chinese Docs
 - [XV6-RISCV-Book-Chinese](https://github.com/FrankZn/xv6-riscv-book-Chinese)
-- [MIT 6.S081 to chinese](https://github.com/huihongxiao/MIT6.S081)
+- [MIT 6.S081 to chinese](https://github.com/huihongxiao/MIT6.S081)  
