@@ -116,11 +116,15 @@ sys_sysinfo(void)
     struct proc *p = myproc();
     struct sysinfo info;
     
+    // get msg from user mode from register a0
+    // and save in addr
     if(argaddr(0, &addr) < 0)
         return -1;
 
     info.freemem = freemem();
     info.nproc = usedproc();
+    // copy data from kernel and save in var info
+    // so that info can be sent to user mode through copyout
     if(copyout(p->pagetable, addr, (char*)&info, sizeof(info)) < 0)
         return -1;
     return 0;

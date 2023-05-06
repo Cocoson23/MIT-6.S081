@@ -81,7 +81,9 @@ kalloc(void)
   return (void*)r;
 }
 
-// Get free memry size in the kernel
+// Get free memory size in the kernel
+// memory is saved as a link of page tables
+// size of each node is PGSIZE
 uint64
 freemem(void) {
     int num = 0;

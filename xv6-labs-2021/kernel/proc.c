@@ -658,7 +658,10 @@ procdump(void)
 
 // Get the number of not unused process
 int usedproc() {
+    // count var
     int num = 0;
+    // processes are save in the array proc
+    // visit the array to get every process' state
     for(int i = 0; i < NPROC; i++) {
         if(proc[i].state != UNUSED)
             num++;
