@@ -315,7 +315,6 @@ fork(void)
   np->state = RUNNABLE;
   release(&np->lock);
 
-  np->trace_mask = p->trace_mask;
   return pid;
 }
 
@@ -654,17 +653,4 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
-}
-
-// Get the number of not unused process
-int usedproc() {
-    // count var
-    int num = 0;
-    // processes are save in the array proc
-    // visit the array to get every process' state
-    for(int i = 0; i < NPROC; i++) {
-        if(proc[i].state != UNUSED)
-            num++;
-    }
-    return num;
 }

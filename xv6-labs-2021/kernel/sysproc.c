@@ -1,12 +1,11 @@
 #include "types.h"
 #include "riscv.h"
+#include "param.h"
 #include "defs.h"
 #include "date.h"
-#include "param.h"
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
-#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -47,6 +46,7 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -1;
+  
   addr = myproc()->sz;
   if(growproc(n) < 0)
     return -1;
@@ -58,6 +58,7 @@ sys_sleep(void)
 {
   int n;
   uint ticks0;
+
 
   if(argint(0, &n) < 0)
     return -1;
@@ -73,6 +74,16 @@ sys_sleep(void)
   release(&tickslock);
   return 0;
 }
+
+
+#ifdef LAB_PGTBL
+int
+sys_pgaccess(void)
+{
+  // lab pgtbl: your code here.
+  return 0;
+}
+#endif
 
 uint64
 sys_kill(void)
@@ -95,37 +106,4 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
-}
-
-// return -1 when trace failed
-// return 0 when trace success
-uint64
-sys_trace(void)
-{
-    int num;
-    if(argint(0, &num) < 0)
-      return -1;
-    myproc()->trace_mask = num;
-    return 0;
-}
-
-uint64
-sys_sysinfo(void)
-{
-    uint64 addr;
-    struct proc *p = myproc();
-    struct sysinfo info;
-    
-    // get msg from user mode from register a0
-    // and save in addr
-    if(argaddr(0, &addr) < 0)
-        return -1;
-
-    info.freemem = freemem();
-    info.nproc = usedproc();
-    // copy data from kernel and save in var info
-    // so that info can be sent to user mode through copyout
-    if(copyout(p->pagetable, addr, (char*)&info, sizeof(info)) < 0)
-        return -1;
-    return 0;
 }

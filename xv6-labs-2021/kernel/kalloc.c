@@ -80,16 +80,3 @@ kalloc(void)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
 }
-
-// Get free memory size in the kernel
-// memory is saved as a link of page tables
-// size of each node is PGSIZE
-uint64
-freemem(void) {
-    int num = 0;
-    acquire(&kmem.lock);
-    for(struct run* step = kmem.freelist; step != 0; step = step->next)
-        num++;
-    release(&kmem.lock);
-    return num * PGSIZE;
-}
