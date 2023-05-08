@@ -12,6 +12,17 @@ xv6-labs-2021 -> environment to get your grade
 
 - Test your code  
 `make grade`
+## Ho to use gdb ##  
+- Install gdb-multiarch  
+`sudo apt-get install gdb-multiarch`  
+- create .gdbinit  
+edit "YOUR_PATH"  
+`echo "add-auto-load-safe-path YOUR_PATH/xv6-labs-2021/.gdbinit " >> ~/.gdbinit`  
+- make qemu-gdb  
+`make qemu-gdb`  
+- run gdb command in another terminal  
+`gdb-multiarch`  
+***
 ## Document ##  
 Official Docs
 - [Official XV6 Link](https://github.com/mit-pdos/xv6-riscv)  
