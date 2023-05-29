@@ -20,7 +20,7 @@ edit "YOUR_PATH"
 `echo "add-auto-load-safe-path YOUR_PATH/xv6-labs-2021/.gdbinit " >> ~/.gdbinit`  
 - make qemu-gdb  
 `make qemu-gdb`  
-- run gdb command in another terminal  
+- run gdb command in another new terminal  
 `gdb-multiarch`  
 ***
 ## Document ##  
@@ -29,4 +29,4 @@ Official Docs
 
 Chinese Docs
 - [XV6-RISCV-Book-Chinese](https://github.com/FrankZn/xv6-riscv-book-Chinese)
-- [MIT 6.S081 to chinese](https://github.com/huihongxiao/MIT6.S081)  
+- [MIT 6.S081 to Chinese](https://github.com/huihongxiao/MIT6.S081)  
