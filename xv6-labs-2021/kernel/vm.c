@@ -388,7 +388,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     srcva = va0 + PGSIZE;
   }
   return 0;
-    }
+}
 
 // Copy a null-terminated string from user to kernel.
 // Copy bytes to dst from virtual address srcva in a given page table,
@@ -431,62 +431,4 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
-}
-
-void 
-_vmprint(pagetable_t pagetable, int level)
-{
-  for(int i = 0; i < 512; i++){
-      pte_t pte = pagetable[i];
-      if(pte & PTE_V){
-          if(level==0)
-              printf("..%d: ", i);
-          else if(level==1)
-              printf(".. ..%d: ", i);
-          else if(level==2)
-              printf(".. .. ..%d: ", i);
-
-          uint64 child = PTE2PA(pte);
-          printf("pte %p pa %p\n", pte, child);
-      
-          // 若当前pte非最底层页表项，则递归
-          // 只有最底层pte才设置了 R W X 位
-          if ((pte & (PTE_R|PTE_W|PTE_X)) == 0)
-              _vmprint((pagetable_t)child, level + 1);
-    }
-  }
-}
-
-void 
-vmprint(pagetable_t pagetable)
-{
-  printf("page table %p\n", pagetable);
-  _vmprint(pagetable, 0);
-}
-
-int
-pgaccess(pagetable_t pagetable, uint64 start_va, int pgnum, uint64 buffer)
-{
-  if(pgnum > 512)
-    return -1;
-  
-  unsigned int bitmask = 0;
-  int flag = 1;
-  for(int count = 0; count < pgnum; count++) {
-
-   uint64 va = start_va + count * PGSIZE;
-   pte_t* pte = walk(pagetable, va, 0);
-   if(pte == 0)
-     return -1;
-   
-   if(PTE_A & *(pte)) {
-
-     bitmask |= (flag << count);
-
-     *pte &= ~PTE_A;
-   }
-  }
-
-  copyout(pagetable, buffer, (char*)&bitmask, sizeof(bitmask));
-  return 0;
 }
