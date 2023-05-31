@@ -461,3 +461,30 @@ void vmprint(pagetable_t pagetable)
   printf("page table %p\n", pagetable);
   _vmprint(pagetable, 0);
 }
+
+int
+pgaccess(pagetable_t pagetable, uint64 start_va, int pgnum, uint64 buffer)
+{
+  if(pgnum > 512)
+    return -1;
+  
+  unsigned int bitmask = 0;
+  int flag = 1;
+  for(int count = 0; count < pgnum; count++) {
+
+   uint64 va = start_va + count * PGSIZE;
+   pte_t* pte = walk(pagetable, va, 0);
+   if(pte == 0)
+     return -1;
+   
+   if(PTE_A & *(pte)) {
+
+     bitmask |= (flag << count);
+
+     *pte &= ~PTE_A;
+   }
+  }
+
+  copyout(pagetable, buffer, (char*)&bitmask, sizeof(bitmask));
+  return 0;
+}
