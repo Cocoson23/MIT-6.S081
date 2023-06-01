@@ -30,3 +30,4 @@ Official Docs
 Chinese Docs
 - [XV6-RISCV-Book-Chinese](https://github.com/FrankZn/xv6-riscv-book-Chinese)
 - [MIT 6.S081 to Chinese](https://github.com/huihongxiao/MIT6.S081)  
+- [MIT 6.S081 to Chinese(Gitbook version)](https://mit-public-courses-cn-translatio.gitbook.io/mit6-s081/)  
