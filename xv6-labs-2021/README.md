@@ -3,6 +3,7 @@ xv6中traps分为如下三类
 - 系统调用  
 - 设备中断  
 - 异常  
+***  
 区分为从user space还是kernel space陷入traps，对各种情况分别处理。  
 - trap frome user space  
 `uservec` swap a0与sscratch后将当前工作环境保存至trapframe中。  
