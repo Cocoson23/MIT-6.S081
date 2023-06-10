@@ -122,6 +122,7 @@ panic(char *s)
   printf(s);
   printf("\n");
   panicked = 1; // freeze uart output from other CPUs
+  backtrace();
   for(;;)
     ;
 }
@@ -131,4 +132,18 @@ printfinit(void)
 {
   initlock(&pr.lock, "pr");
   pr.locking = 1;
+}
+
+// lab trap backtrace add
+void
+backtrace(void)
+{
+    uint64 framepointer = r_fp();
+    uint64 pgtop = PGROUNDUP(framepointer);
+    uint64 pgdown = PGROUNDDOWN(framepointer);
+
+    printf("backtrace:\n");
+    for(; framepointer > pgdown && framepointer < pgtop; framepointer = *((uint64*)(framepointer-16))) {
+        printf("%p\n", *((uint64*)(framepointer-8)));
+    }
 }
