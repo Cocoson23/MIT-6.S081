@@ -138,11 +138,15 @@ printfinit(void)
 void
 backtrace(void)
 {
+    // use r_fp() get framepointer
     uint64 framepointer = r_fp();
+    // get current stack frame page top and down address
     uint64 pgtop = PGROUNDUP(framepointer);
     uint64 pgdown = PGROUNDDOWN(framepointer);
 
     printf("backtrace:\n");
+    // framepointer - 8 => "Return address"
+    // framepointer - 16 => "To Prev. Frame(fp)"
     for(; framepointer > pgdown && framepointer < pgtop; framepointer = *((uint64*)(framepointer-16))) {
         printf("%p\n", *((uint64*)(framepointer-8)));
     }
