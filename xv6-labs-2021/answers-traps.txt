@@ -1,6 +1,0 @@
-a2
-none
-0x630
-0x38
-He110 World, 0x726c6400, no change for 57616
-print the val of a3

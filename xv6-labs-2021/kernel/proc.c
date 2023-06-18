@@ -114,7 +114,6 @@ allocproc(void)
       release(&p->lock);
     }
   }
-  
   return 0;
 
 found:
@@ -141,15 +140,6 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-  // lab traps add
-  p->ticks_num = 0;
-  p->interval = 0;
-  p->handler = 0;
-  p->handler_flag = 0;
-  if((p->trapframe_bak = (struct trapframe*)kalloc()) == 0) {
-      release(&p->lock);
-      return 0;
-  }
 
   return p;
 }
@@ -174,13 +164,6 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
-  
-  p->interval = 0;
-  p->ticks_num = 0;
-  p->handler = 0;
-  p->handler_flag = 0;
-  if(p->trapframe_bak)
-      kfree((void*)p->trapframe_bak);
 }
 
 // Create a user page table for a given process,

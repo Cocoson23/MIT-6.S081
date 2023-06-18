@@ -78,21 +78,7 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
-  {
-      if(p->interval)
-      {
-          // 若ticks达到了间隔时长
-          // 则将epc指向用户自定义的trap handler
-          if(p->ticks_num == p->interval && p->handler_flag == 0)
-          {
-              p->handler_flag = 1;
-              *p->trapframe_bak = *p->trapframe;
-              p->trapframe->epc = p->handler;
-          }
-      }
-      p->ticks_num = p->ticks_num+1;
-      yield();
-  }
+    yield();
 
   usertrapret();
 }

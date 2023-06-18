@@ -47,7 +47,6 @@ sys_sbrk(void)
   if(argint(0, &n) < 0)
     return -1;
   addr = myproc()->sz;
-  //myproc()->sz = myproc()->sz+n;
   if(growproc(n) < 0)
     return -1;
   return addr;
@@ -70,8 +69,6 @@ sys_sleep(void)
     }
     sleep(&ticks, &tickslock);
   }
-  // lab trap bractrace add
-  backtrace();
   release(&tickslock);
   return 0;
 }
@@ -97,30 +94,4 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
-}
-
-// lab traps add
-
-int
-sys_sigreturn(void)
-{
-    struct proc* p = myproc();
-    *p->trapframe = *p->trapframe_bak;
-    p->ticks_num = 0;
-    p->handler_flag = 0;
-    return 0;
-}
-
-int
-sys_sigalarm(void)
-{
-    // get syscall args
-    int interval;
-    uint64 handler;
-    if(argint(0, &interval) < 0 || argaddr(1, &handler) < 0)
-        return -1;
-    struct proc* p = myproc();
-    p->interval = interval;
-    p->handler = handler;
-    return 0;
 }
