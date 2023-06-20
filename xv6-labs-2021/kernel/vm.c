@@ -303,7 +303,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -311,12 +310,16 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    // 将父子的页表项PTE_W均置0为不可写
+    *pte &= ~PTE_W;
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    //if((mem = kalloc()) == 0)
+    //  goto err;
+    //memmove(mem, (char*)pa, PGSIZE);
+    
+    // PA 引用+1
+    refadd(pa);
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
       goto err;
     }
   }
@@ -350,7 +353,26 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
+    // pa0 = walkaddr(pagetable, va0);
+    
+    // 排除va非法地址
+    if(va0 > MAXVA)
+        return -1;
+    pte_t* pte = walk(pagetable, va0, 0);
+    // 同样walk后pte == 0也表示为非法地址
+    if(pte == 0)
+        return -1;
+    // 对页表项flags进行判定
+    // 若非法或非用户页表项则return -1
+    if((*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+        return -1;
+    // 仅对设置了PTE_W不可写的页表项进行cow alloc
+    if((*pte & PTE_W) == 0) {
+        if(cowalloc(pagetable, va0) < 0)
+            return -1;
+    }
+    pa0 = PTE2PA(*pte);
+
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
