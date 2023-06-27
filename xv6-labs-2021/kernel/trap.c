@@ -29,49 +29,6 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
-// lab cow add
-// 实现COW功能函数
-int
-cowalloc(pagetable_t pagetable, uint64 va)
-{
-    // va与PTE合法性判定
-    if(va >= MAXVA)
-        return -1;
-
-    pte_t* pte = walk(pagetable, va, 0);
-    if(pte == 0)
-        return -1;
-
-    if((*pte & PTE_U) == 0 || (*pte & PTE_V) == 0)
-        return -1;
-
-    uint64 old_pa = PTE2PA(*pte);
-    uint64 new_pa = (uint64)kalloc();
-    if(new_pa == 0) {
-        printf("cowalloc: kalloc failed\n");
-        return -1;
-    }
-
-    memmove((void*)new_pa, (void*)old_pa, PGSIZE);
-
-    uint flags = PTE_FLAGS(*pte);
-    // 恢复可写
-    flags |= PTE_W;
-    // 取消原PA与pagetable的映射
-    uvmunmap(pagetable, PGROUNDDOWN(va), 1, 0);
-    // remap
-    if(mappages(pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)new_pa, flags) != 0) {
-        kfree((void*)new_pa);
-        panic("cowalloc: mappages");
-    }
-    // *pte = PA2PTE(new_pa) | PTE_V | PTE_W | PTE_R | PTE_U | PTE_X;
-
-    kfree((void*)old_pa);
-
-
-    return 0;
-}
-
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -96,7 +53,7 @@ usertrap(void)
   if(r_scause() == 8){
     // system call
 
-    if(p->killed)
+    if(lockfree_read4(&p->killed))
       exit(-1);
 
     // sepc points to the ecall instruction,
@@ -108,20 +65,19 @@ usertrap(void)
     intr_on();
 
     syscall();
-  // 仅处理写引发的Page fault
-  } else if(r_scause() == 15) {
-      if(cowalloc(p->pagetable, r_stval()) < 0)
-          p->killed = 1;
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
+
+    
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
 
-  if(p->killed)
+  if(lockfree_read4(&p->killed))
     exit(-1);
+  
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
@@ -236,7 +192,13 @@ devintr()
       uartintr();
     } else if(irq == VIRTIO0_IRQ){
       virtio_disk_intr();
-    } else if(irq){
+    }
+#ifdef LAB_NET
+    else if(irq == E1000_IRQ){
+      e1000_intr();
+    }
+#endif
+    else if(irq){
       printf("unexpected interrupt irq=%d\n", irq);
     }
 
