@@ -9,11 +9,15 @@
 #include "net.h"
 
 #define TX_RING_SIZE 16
+// 接收缓冲区描述符数组
 static struct tx_desc tx_ring[TX_RING_SIZE] __attribute__((aligned(16)));
+// 接收缓冲区地址数组
 static struct mbuf *tx_mbufs[TX_RING_SIZE];
 
 #define RX_RING_SIZE 16
+// 发送缓冲区描述符数组
 static struct rx_desc rx_ring[RX_RING_SIZE] __attribute__((aligned(16)));
+// 发送缓冲区地址数组
 static struct mbuf *rx_mbufs[RX_RING_SIZE];
 
 // remember where the e1000's registers live.
@@ -28,7 +32,7 @@ void
 e1000_init(uint32 *xregs)
 {
   int i;
-
+  // 初始化一个网卡硬件的锁
   initlock(&e1000_lock, "e1000");
 
   regs = xregs;
@@ -103,6 +107,31 @@ e1000_transmit(struct mbuf *m)
   // a pointer so that it can be freed after sending.
   //
   
+  // ask the E1000 for the TX ring index
+  int tx_index = regs[E1000_TDT];
+  struct tx_desc* next_packet = &tx_ring[tx_index];
+  // acquire E1000 device lock
+  acquire(&e1000_lock);
+  // check the E1000_TXD_STAT_DD
+  if((next_packet->status & E1000_TXD_STAT_DD) == 0) {
+      release(&e1000_lock);
+      return -1;
+  }
+  // use mbuffree to free last mbuf
+  if(tx_mbufs[tx_index])
+    mbuffree(tx_mbufs[tx_index]);
+  
+  // fill in the descriptor
+  next_packet->addr = (uint64)m->head;
+  next_packet->length = m->len;
+  next_packet->cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  // stash away a pointer to the mbuf for later freeing
+  tx_mbufs[tx_index] = m;
+
+  __sync_synchronize();
+
+  regs[E1000_TDT] = (tx_index+1) % TX_RING_SIZE;
+  release(&e1000_lock);
   return 0;
 }
 
@@ -114,7 +143,33 @@ e1000_recv(void)
   //
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
-  //
+  
+  // ask the E1000 for the ring index
+  int rx_index = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+  struct rx_desc *next_packet = &rx_ring[rx_index];
+
+  // check if a new packet is available by checking for the E1000_RXD_STAT_DD
+  while ((next_packet->status & E1000_RXD_STAT_DD)) {
+    if(next_packet->length > MBUF_SIZE) {
+      panic("e1000 len");
+    }
+    // update the length reported in the descriptor.  
+    rx_mbufs[rx_index]->len = next_packet->length;
+    // deliver the mbuf to the network stack
+    net_rx(rx_mbufs[rx_index]);     
+    // allocate a new mbuf replace the one given to net_rx()
+    rx_mbufs[rx_index] = mbufalloc(0);
+    if (!rx_mbufs[rx_index]) {
+      panic("e1000 no mubfs");
+    }
+    next_packet->addr = (uint64)rx_mbufs[rx_index]->head;
+    next_packet->status = 0;
+    
+    rx_index = (rx_index + 1) % RX_RING_SIZE;
+    next_packet = &rx_ring[rx_index];
+  }
+  // update the E1000_RDT to be the index
+  regs[E1000_RDT] = (rx_index - 1) % RX_RING_SIZE;
 }
 
 void
