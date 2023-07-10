@@ -1,29 +1,27 @@
-# Multithreading #
-使用Pthread和lock机制完成实验  
-- `User Thread`  
-    XV6系统中一个进程仅包含一个`User Thread`，`User Thread`切换时将`Callee Register`及重要的`ra`、`sp`寄存器保存至`trapframe`中  
-- `Kernel Thread`  
-  而`Kernel Thread`切换时则是将各种工作环境保存至`context`对象中，同时`Kernel Thread`于XV6中是共享内存的
+# Networking #
+阅读xv6及E1000用户手册，完成网卡驱动中`e1000_transmit()`及`e1000_recv()`函数。发送与接收数据分别设置了对应的缓冲区描述符数组及缓冲区地址数组，其实现思路为循环队列。  
+## Lab ##
+- `e1000_transmit()`  
+    实现网卡驱动发送数据功能，将待发送数据插入到`tx ring`尾部。  
+      · 按照hints中首先获取`tx ring`尾部索引  
+      · 并对该索引对应缓冲区描述符结构体中的`status`做对应检查  
+      · 若尾部索引对应发送缓冲区中存有内容，则清空  
+      · 将`struct mbuf *m`中对应内容放入对应缓冲区结构体  
+      · 剩余转发工作则由硬件进行处理  
+- `e1000_recv()`  
+    实现网卡驱动接收数据功能，当网卡硬件发出中断时，调用该函数对数据进行解封装并存入对应缓冲区。  
+      · 按照hints中首先获取`rx ring`尾部+1索引  
+      · 检查`status`中`E1000_RXD_STAT_DD`状态位，当且仅当当前数据帧被网卡硬件处理完毕才进行下一步解封装操作  
+      · 使用`net_rx()`函数对数据帧进行解封装  
+      · 将数据帧中对应内容放入对应`rx_mbufs[rx_index]`缓冲区结构体  
+      · 更新接收缓冲区尾部索引`E1000_RDT`
+## Important ##  
+    Section 2 is essential and gives an overview of the entire device.
+    Section 3.2 gives an overview of packet receiving.
+    Section 3.3 gives an overview of packet transmission, alongside section 3.4.
+    Section 13 gives an overview of the registers used by the E1000.
+    Section 14 may help you understand the init code that we've provided.
 ***  
-## Labs ##  
-### Uthread: switching between threads ###  
-完善`/user/uthread.c`中代码，以实现用户线程的切换(线程工作状态的保存与恢复)  
-#### 重要提示 ####  
-- 可以自定义结构体以保存`user thread`的工作环境
-- 线程初始化时，`ra`、`sp`寄存器的值就应当初始化
-- `/user/uthread.S`可以仿照`/kernel/switch.S`完成
-***  
-### Using threads ###  
-该实验实现了一个哈希表的操作，需要通过`lock`机制实现哈希表的多线程使用  
-#### 重要提示 ####  
-- 可以为哈希表每一个`bucket`创建一个锁进行保护  
-- 按照提示中在`put`、`get`中添加对应的申请锁与解锁  
-- 记得为每一个锁初始化
-***  
-### Barrier ###  
-该实验实现指定`wait`线程数量，达到要求数量后一同唤醒所有线程  
-#### 重要提示 ####  
-- `pthread_cond_wait(&cond, &mutex)`可以使线程`wait`
-- `pthread_cond_broadcast(&cond)`可以唤醒`wait`的线程
-- `pthread_mutex_unlock(&lock)`应当在`pthread_cond_broadcast(&cond)`之后进行
-- 由于等待线程计数变量同样是线程间共享变量，则需要锁对其进行保护
+## Reference ##
+- [Lab Networking Blog](https://blog.csdn.net/LostUnravel/article/details/121437373)
+- [E1000 Software Developer's Manual](https://pdos.csail.mit.edu/6.S081/2021/readings/8254x_GBe_SDM.pdf)
