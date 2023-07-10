@@ -9,15 +9,15 @@
 #include "net.h"
 
 #define TX_RING_SIZE 16
-// 接收缓冲区描述符数组
+// 发送缓冲区描述符数组
 static struct tx_desc tx_ring[TX_RING_SIZE] __attribute__((aligned(16)));
-// 接收缓冲区地址数组
+// 发送缓冲区地址数组
 static struct mbuf *tx_mbufs[TX_RING_SIZE];
 
 #define RX_RING_SIZE 16
-// 发送缓冲区描述符数组
+// 接收缓冲区描述符数组
 static struct rx_desc rx_ring[RX_RING_SIZE] __attribute__((aligned(16)));
-// 发送缓冲区地址数组
+// 接收缓冲区地址数组
 static struct mbuf *rx_mbufs[RX_RING_SIZE];
 
 // remember where the e1000's registers live.
