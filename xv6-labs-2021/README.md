@@ -1,27 +1,57 @@
-# Networking #
-阅读xv6及E1000用户手册，完成网卡驱动中`e1000_transmit()`及`e1000_recv()`函数。发送与接收数据分别设置了对应的缓冲区描述符数组及缓冲区地址数组，其实现思路为循环队列。  
-## Lab ##
-- `e1000_transmit()`  
-    实现网卡驱动发送数据功能，将待发送数据插入到`tx ring`尾部。  
-      · 按照hints中首先获取`tx ring`尾部索引  
-      · 并对该索引对应缓冲区描述符结构体中的`status`做对应检查  
-      · 若尾部索引对应发送缓冲区中存有内容，则清空  
-      · 将`struct mbuf *m`中对应内容放入对应缓冲区结构体  
-      · 剩余转发工作则由硬件进行处理  
-- `e1000_recv()`  
-    实现网卡驱动接收数据功能，当网卡硬件发出中断时，调用该函数对数据进行解封装并存入对应缓冲区。  
-      · 按照hints中首先获取`rx ring`尾部+1索引  
-      · 检查`status`中`E1000_RXD_STAT_DD`状态位，当且仅当当前数据帧被网卡硬件处理完毕才进行下一步解封装操作  
-      · 使用`net_rx()`函数对数据帧进行解封装  
-      · 将数据帧中对应内容放入对应`rx_mbufs[rx_index]`缓冲区结构体  
-      · 更新接收缓冲区尾部索引`E1000_RDT`
-## Important ##  
-    Section 2 is essential and gives an overview of the entire device.
-    Section 3.2 gives an overview of packet receiving.
-    Section 3.3 gives an overview of packet transmission, alongside section 3.4.
-    Section 13 gives an overview of the registers used by the E1000.
-    Section 14 may help you understand the init code that we've provided.
+# Lock #  
+通过编程，将`Memory allocator`与`Buffer cache`中修改为细粒度的`lock`。  
+**READ**  
+
+    Chapter 6: "Locking" and the corresponding code.
+    Section 3.5: "Code: Physical memory allocator"
+    Section 8.1 through 8.3: "Overview", "Buffer cache layer", and "Code: Buffer cache"  
+***
+## Memory allocator ##
+内存块仅由一个`lock`进行管理，当多进程并发获取内存时，则会产生过多的等待，将原本的`lock`机制修改为细粒度的`lock`能够有效较少该问题。  
+### Important ###  
+- 原本的`free PA page`均在`freelist`上，根据实验`hints`所提供提示，可以将原本的大链表拆分成`N * little freelist`，由各个CPU单独管理其`lock`。可以将`pa_start`到`pa_end`中的地址直接拆分成`NCPU`段，并分别插入到对应的`freelist`中。也可以将所有的地址直接分配到运行kinit的CPU的`freelist`上，等待后续需要时插入其它链表。  
+- 使用`push_off()`及`pop_off()`实现对中断的控制，避免递归获取多个`lock`时发生死锁。
+### Steps ###
+
+- 定义kmem数组，将原本单独list与lock拆分成`NCPU`个list与lock  
+  `struct kmem kmems[NCPU];`
+- 在`kernel/kalloc.c/kfree()`中实现将内存也插入到当前list  
+    ```
+    int cpu_id;
+    // 关中断
+    push_off();
+    cpu_id = cpuid();
+    acquire(&(kmems[cpu_id]).lock);
+    r->next = kmems[cpu_id].freelist;
+    kmems[cpu_id].freelist = r;
+    release(&(kmems[cpu_id]).lock);
+    // 开中断
+    pop_off();
+    ```
+- 在`kernel/kalloc.c/kalloc()`中实现`free page`的获取
+  当前`list`中剩有`free page`时直接分配，若无则遍历搜寻其余`CPU free list`中剩余`free page`进行分配。
 ***  
+## Buffer cache ##
+文件系统中，`buffer cache`负责同步对磁盘块的访问及缓存使用较多的磁盘块以提高访问速度。当xv6中使用的是一个粗粒度的锁对整个`buffer cache`进行管理，同样存在过多等待锁的情况，通过改进锁机制实现细粒度的锁同样可以提高该块性能。  
+**其思想类似于上述实验，根据`hints`所提示，将原本结构可以化作哈希表来进行修改，即每一个`bukcet`一个`lock`**  
+### Steps ###
+- 于`struct bcache`中将整个双向链表拆分为多个双向链表，同时为每个双向链表添加对应的`lock`，并设置整体大锁以避免死锁
+```
+    struct {
+    struct spinlock lock[NBUCKETS];
+    struct buf buf[NBUF];
+    struct buf head[NBUCKETS];
+    struct spinlock biglock;
+  } bcache;
+```
+- 在`binit()`中实现锁的初始化，并将`buffer`均插入`bucket 0`中  
+- `bget()`实现查找对应的`block`，分为了三种情况分别处理  
+  - 于当前`bucket`中查找到对应`block`则直接处理并返回
+  - 若当前`bucket`并未缓存则在当前`bucket`中查找未使用且满足LRU算法的`block`使用
+  - 若当前`bucket`不满足上述两种情况，则在其余`buffer cache bukcet`中寻找合适的`block`
+- 修改`brelse()`中`refcnt == 0`的处理方法为直接更新其时间戳
+- 对应更新`bpin()`与`bunpin()`中对`bcache.lock`的使用  
 ## Reference ##
-- [Lab Networking Blog](https://blog.csdn.net/LostUnravel/article/details/121437373)
-- [E1000 Software Developer's Manual](https://pdos.csail.mit.edu/6.S081/2021/readings/8254x_GBe_SDM.pdf)
+- [Lab Lock Blog A](https://www.cnblogs.com/duile/p/16389164.html)  
+- [Lab Lock Blog B](https://zhuanlan.zhihu.com/p/463598780)
+- [Lab Lock Code](https://github.com/computer-net/MIT-6.S081-2020/blob/master/lab8-lock/kernel/bio.c)
