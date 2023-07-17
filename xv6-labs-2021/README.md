@@ -1,57 +1,38 @@
-# Lock #  
-通过编程，将`Memory allocator`与`Buffer cache`中修改为细粒度的`lock`。  
-**READ**  
+# File System #  
 
-    Chapter 6: "Locking" and the corresponding code.
-    Section 3.5: "Code: Physical memory allocator"
-    Section 8.1 through 8.3: "Overview", "Buffer cache layer", and "Code: Buffer cache"  
+    Before writing code, you should read "Chapter 8: File system" from the xv6 book and study the corresponding code.  
+XV6中实现了较为简易的文件系统，该实验对应章节讲解了文件系统的结构层次，及每一层次对应的功能与特点。  
+![1689580790165.jpg](https://s2.loli.net/2023/07/17/Gadp1PJIZzMTfVR.png)  
+其中每个文件有对应的数据结构inode对其信息进行标识，对文件的修改与文件系统的恢复则依赖Logging。当需要对文件进行操作时，对应的读写操作会以事务的形式存储到Log，然后以原子操作的表现形式完成。    
+
 ***
-## Memory allocator ##
-内存块仅由一个`lock`进行管理，当多进程并发获取内存时，则会产生过多的等待，将原本的`lock`机制修改为细粒度的`lock`能够有效较少该问题。  
+## Large files ##
+文件系统中每个文件拥有自身对应的`inode`数据结构，其中内存块对应了磁盘上的磁盘块(多个扇区)。目前XV6中inode含有`type` `major` `minor` `nlink` `size` 及12个`direct block` 与 1个 `indirect block`，而`indirect block`为一级索引其指向了一个含有256个`block`地址的块，表明当前支持文件大小最大为 `12 + 256 = 268` 个数据块。  
+**该实验则是希望通过修改inode结构扩大XV6文件系统支持的文件大小至65803个block**  
+![1689580635809.jpg](https://s2.loli.net/2023/07/17/38qxFkSnCBsjVNZ.png)    
 ### Important ###  
-- 原本的`free PA page`均在`freelist`上，根据实验`hints`所提供提示，可以将原本的大链表拆分成`N * little freelist`，由各个CPU单独管理其`lock`。可以将`pa_start`到`pa_end`中的地址直接拆分成`NCPU`段，并分别插入到对应的`freelist`中。也可以将所有的地址直接分配到运行kinit的CPU的`freelist`上，等待后续需要时插入其它链表。  
-- 使用`push_off()`及`pop_off()`实现对中断的控制，避免递归获取多个`lock`时发生死锁。
-### Steps ###
+- 根据`hints`提示，可以将`direct block`区域减少一个`block`，将剩余的`block`扩展为二级索引的`indirect block`
+- 修改后`code`中`bn0 - bn10`即为`data block`，`bn11`即为单层索引`block`对应了`256个data block`，`bn12`即为二层索引`block`对应了`256 * 256个data block`  
+  `12 + 256 + 256 * 256 = 65804 data blocks`
+- `kernel/fs.h`中`NDIRECT`原为12，减少一个块后应修改为11
+- `kernel/fs.h`的`struct dinode`与`kernel/file.h`的`struct inode`中`uint addrs[NDIRECT+1]`由于`NDIRECT`减小了1应修改为`uint addrs[NDIRECT+2]`，整体inode大小并未改变
+- 于`kernel/fs.c/bmap()`中添加双层索引的映射，并于`kernel/fs.c/itrunc()`中添加对双层索引的取消映射
 
-- 定义kmem数组，将原本单独list与lock拆分成`NCPU`个list与lock  
-  `struct kmem kmems[NCPU];`
-- 在`kernel/kalloc.c/kfree()`中实现将内存也插入到当前list  
-    ```
-    int cpu_id;
-    // 关中断
-    push_off();
-    cpu_id = cpuid();
-    acquire(&(kmems[cpu_id]).lock);
-    r->next = kmems[cpu_id].freelist;
-    kmems[cpu_id].freelist = r;
-    release(&(kmems[cpu_id]).lock);
-    // 开中断
-    pop_off();
-    ```
-- 在`kernel/kalloc.c/kalloc()`中实现`free page`的获取
-  当前`list`中剩有`free page`时直接分配，若无则遍历搜寻其余`CPU free list`中剩余`free page`进行分配。
 ***  
-## Buffer cache ##
-文件系统中，`buffer cache`负责同步对磁盘块的访问及缓存使用较多的磁盘块以提高访问速度。当xv6中使用的是一个粗粒度的锁对整个`buffer cache`进行管理，同样存在过多等待锁的情况，通过改进锁机制实现细粒度的锁同样可以提高该块性能。  
-**其思想类似于上述实验，根据`hints`所提示，将原本结构可以化作哈希表来进行修改，即每一个`bukcet`一个`lock`**  
-### Steps ###
-- 于`struct bcache`中将整个双向链表拆分为多个双向链表，同时为每个双向链表添加对应的`lock`，并设置整体大锁以避免死锁
-```
-    struct {
-    struct spinlock lock[NBUCKETS];
-    struct buf buf[NBUF];
-    struct buf head[NBUCKETS];
-    struct spinlock biglock;
-  } bcache;
-```
-- 在`binit()`中实现锁的初始化，并将`buffer`均插入`bucket 0`中  
-- `bget()`实现查找对应的`block`，分为了三种情况分别处理  
-  - 于当前`bucket`中查找到对应`block`则直接处理并返回
-  - 若当前`bucket`并未缓存则在当前`bucket`中查找未使用且满足LRU算法的`block`使用
-  - 若当前`bucket`不满足上述两种情况，则在其余`buffer cache bukcet`中寻找合适的`block`
-- 修改`brelse()`中`refcnt == 0`的处理方法为直接更新其时间戳
-- 对应更新`bpin()`与`bunpin()`中对`bcache.lock`的使用  
+## Symbolic links ##
+XV6文件系统仅实现了硬链接，通过该实验将为XV6文件系统实现软链接。  
+- 硬链接：多个文件名链接指向同一文件，即一个文件拥有多个有效路径名，可以防止“误删”的情况，当且仅当当前文件硬链接计数为0了才会彻底删除当前文件
+- 软连接：类似于Windows下的快捷方式，以符号链接文件形式存在，其中记录了链接对象文件的位置信息  
+### Important ###
+- 根据`hints`添加系统调用
+- 于`kernel/sysfile.c`中实现`sys_symlink()`系统调用，即获取`src`与`target`路径并根据`src`路径创建符号链接文件inode并将`target`文件路径写入inode中
+  **注意create返回的inode均已上锁，末尾需要解锁**
+- 相对原本XV6文件系统新增了`symbolic link`文件，故系统调用`sys_open()`中需要增加对应部分
+  - 当前文件是符号链接时，需要使用`readi()`将符号链接中目标文件的路径读出
+  - 随即使用`namei()`根据读出的路径获取目标文件的inode
+  - 即可完成通过符号链接文件对目标文件的`open`操作
+  - 但当符号链接存储对象仍为符号链接(即递归链接)时，则需递归打开符号链接文件，此处根据`hints`可以将递归打开深度设置为10
 ## Reference ##
-- [Lab Lock Blog A](https://www.cnblogs.com/duile/p/16389164.html)  
-- [Lab Lock Blog B](https://zhuanlan.zhihu.com/p/463598780)
-- [Lab Lock Code](https://github.com/computer-net/MIT-6.S081-2020/blob/master/lab8-lock/kernel/bio.c)
+- [Lab Lock Blog](https://zhuanlan.zhihu.com/p/430816131)  
+- [Linux soft and hard link](https://zhuanlan.zhihu.com/p/67366919)
+
