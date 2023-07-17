@@ -51,7 +51,6 @@ struct log log;
 static void recover_from_log(void);
 static void commit();
 
-// 当xv6 file system重启过程中第一件事就是调用该函数
 void
 initlog(int dev, struct superblock *sb)
 {
@@ -195,9 +194,7 @@ static void
 commit()
 {
   if (log.lh.n > 0) {
-    // cache to log
     write_log();     // Write modified blocks from cache to log
-    // log to disk
     write_head();    // Write header to disk -- the real commit
     install_trans(0); // Now install writes to home locations
     log.lh.n = 0;

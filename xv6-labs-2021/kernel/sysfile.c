@@ -238,7 +238,6 @@ bad:
   return -1;
 }
 
-// 根据路径找到最后一个目录，并于该目录查找对应文件，若文件不存在则调用ialloc为文件分配inode，若存在则返回error
 static struct inode*
 create(char *path, short type, short major, short minor)
 {
@@ -284,7 +283,6 @@ create(char *path, short type, short major, short minor)
   return ip;
 }
 
-// create file
 uint64
 sys_open(void)
 {
@@ -297,15 +295,11 @@ sys_open(void)
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
 
-  // 事务中所有的写block的操作都具备原子性
-  // 表明开始一个事务
   begin_op();
 
   if(omode & O_CREATE){
     ip = create(path, T_FILE, 0, 0);
     if(ip == 0){
-      // 结束事务
-      // end_op 中会完成commit操作
       end_op();
       return -1;
     }
@@ -326,43 +320,6 @@ sys_open(void)
     iunlockput(ip);
     end_op();
     return -1;
-  }
-
-  // 符号链接文件inode中存储了链接文件的路径
-  // 故用readi将符号文件中的path读出
-  // 再通过namei根据path找到链接对象文件的inode
-  // 判断对应文件类型进行对应操作
-  //
-  // 若当前文件类型是符号链接文件
-  if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)) {
-    // 设置递归打开符号链接的层数
-    int looptime = 100;
-    for(int i = 0; i < looptime; i++) {
-      // 读取symlink中的path
-      if(readi(ip, 0, (uint64)path, 0, MAXPATH) < MAXPATH) {
-          iunlockput(ip);
-          end_op();
-          return -1;
-      }
-    
-      iunlockput(ip);
-      // 根据path找到对应文件的inode
-      if((ip = namei(path)) == 0) {
-          end_op();
-          return -1;
-      }
-      ilock(ip);
-      // 若递归打开的文件不是符号链接文件则break
-      if(ip->type != T_SYMLINK)
-          break;
-      // 若是符号链接文件则递归继续打开
-      if(i == looptime - 1) {
-          iunlockput(ip);
-          end_op();
-          return -1;
-      }
-    
-    }
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -525,40 +482,5 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
-  return 0;
-}
-
-// 创建符号链接文件
-uint64
-sys_symlink(void)
-{
-  char sympath[MAXPATH];
-  char targetpath[MAXPATH];
-
-  // 读入路径
-  if(argstr(0, targetpath, MAXPATH) < 0 || argstr(1, sympath, MAXPATH) < 0)
-      return -1;
-
-  // 将符号链接存入inode
-  begin_op();
-
-  struct inode* inode;
-
-  // 根据所提供symlink路径创建对应inode
-  if((inode = create(sympath, T_SYMLINK, 0, 0)) == 0) {
-      end_op();
-      return -1;
-  }
-
-  // 将路径写入inode
-  if(writei(inode, 0,  (uint64)targetpath, 0, MAXPATH) < MAXPATH) {
-      iunlockput(inode);
-      end_op();
-      return -1;
-  }
-
-  // create所返回的inode均是已上锁，故需注意解锁
-  iunlockput(inode);
-  end_op();
   return 0;
 }
