@@ -189,6 +189,7 @@ iinit()
 
 static struct inode* iget(uint dev, uint inum);
 
+// 遍历所有inode寻找空闲的block，若找到则将其type置为file 
 // Allocate an inode on device dev.
 // Mark it as allocated by  giving it type type.
 // Returns an unlocked but allocated and referenced inode.
@@ -380,13 +381,24 @@ bmap(struct inode *ip, uint bn)
   uint addr, *a;
   struct buf *bp;
 
+  // 若bn是直接索引区域中的
+  // 直接分配返回
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
       ip->addrs[bn] = addr = balloc(ip->dev);
     return addr;
   }
+  
+  // bn - 直接索引区域的block数量则获得的是间接索引块的相对块号
+  // bn -= NDIRECT 获取NINDIRECT的相对位移
+  // 即假若是第一个indrect block, bn -= NDIRECT 后就表示当前为第一个 INDRECT
   bn -= NDIRECT;
 
+  // bn 0 - 10 inode block
+  // bn11 单层索引 block
+  // bn12 双层索引 block
+  // 若bn属于间接索引块号区域
+  // 单级目录 bn11 下属256个block
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0)
@@ -401,6 +413,34 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
 
+  // 减去 bn11 的block数量
+  bn -= NINDIRECT;
+
+  // 多级目录(2级) bn12 下属 256 * 256 个block
+  if(bn < NDINDIRECT){
+    int blockno = bn / NINDIRECT;
+    int offset = bn % NINDIRECT;
+    // Load indirect block, allocating if necessary.
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    // 读取第一层索引
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[blockno]) == 0){
+      a[blockno] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    // 读取第二层索引
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[offset]) == 0){
+      a[offset] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
   panic("bmap: out of range");
 }
 
@@ -410,9 +450,10 @@ void
 itrunc(struct inode *ip)
 {
   int i, j;
-  struct buf *bp;
-  uint *a;
+  struct buf *bp, *bp1;
+  uint *a, *a1;
 
+  // 释放 bn11 中256个 block
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
@@ -420,15 +461,24 @@ itrunc(struct inode *ip)
     }
   }
 
-  if(ip->addrs[NDIRECT]){
-    bp = bread(ip->dev, ip->addrs[NDIRECT]);
+  if(ip->addrs[NDIRECT+1]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
     a = (uint*)bp->data;
     for(j = 0; j < NINDIRECT; j++){
-      if(a[j])
+      if(a[j]) {
+        bp1 = bread(ip->dev, a[j]);
+        a1 = (uint*)bp1->data;
+        for(int i = 0; i< NINDIRECT; i++) {
+            if(a1[i])
+                bfree(ip->dev, a1[i]);
+        }
+        brelse(bp1);
         bfree(ip->dev, a[j]);
+        a[j] = 0;
+      }
     }
     brelse(bp);
-    bfree(ip->dev, ip->addrs[NDIRECT]);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
     ip->addrs[NDIRECT] = 0;
   }
 
